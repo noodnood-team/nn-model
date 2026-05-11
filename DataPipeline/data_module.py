@@ -82,7 +82,7 @@ def preprocessing(local_path):
 
     df = df[df["image_path"].apply(os.path.exists)]
 
-    # remove rows with zero calories
+    # remove rows with zero calories    
     df = clean_data(df)
 
     logger.info("Preprocessed dataset with {} samples".format(len(df)))
