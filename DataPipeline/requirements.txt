@@ -8,3 +8,4 @@ pandas
 numpy
 pyarrow
 fastparquet
+optuna

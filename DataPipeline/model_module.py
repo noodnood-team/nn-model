@@ -1,3 +1,40 @@
+def build_model(model_name):
+    if model_name == "resnet18":
+        import torchvision.models as models
+        import torch.nn as nn
+        import torch
+
+        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        model.fc = nn.Linear(model.fc.in_features, 4)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+
+        return model, device
+    elif model_name == "resnet34":
+        import torchvision.models as models
+        import torch.nn as nn
+        import torch
+
+        model = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
+        model.fc = nn.Linear(model.fc.in_features, 4)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+
+        return model, device
+    elif model_name == "mobilenet_v3_small":
+        import torchvision.models as models
+        import torch.nn as nn
+        import torch
+        model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT)
+        model.classifier[3] = nn.Linear(model.classifier[3].in_features, 4)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+
+        return model, device
+    
+    else:
+        raise ValueError(f"Unsupported model name: {model_name}")
+
 def resnet_model():
     import torchvision.models as models
     import torch.nn as nn
@@ -123,6 +160,10 @@ def eval(test_loader, model, criterion, device):
     mae_real = mean_absolute_error(y_true, y_pred)
     rmse_real = mse_real ** 0.5
 
+    metrics["mse"] = float(mse_real)
+    metrics["mae"] = float(mae_real)
+    metrics["rmse"] = float(rmse_real)
+
     metrics["overall_mse"] = float(mse_real)
     metrics["overall_mae"] = float(mae_real)
     metrics["overall_rmse"] = float(rmse_real)
@@ -136,6 +177,10 @@ def eval(test_loader, model, criterion, device):
     logger.report_scalar("metrics", "overall_mse", value=float(mse_real), iteration=0)
     logger.report_scalar("metrics", "overall_mae", value=float(mae_real), iteration=0)
     logger.report_scalar("metrics", "overall_rmse", value=float(rmse_real), iteration=0)
+    
+    logger.report_scalar("metrics", "mse", value=float(mse_real), iteration=0)
+    logger.report_scalar("metrics", "mae", value=float(mae_real), iteration=0)
+    logger.report_scalar("metrics", "rmse", value=float(rmse_real), iteration=0)
 
     # Per-target metrics
     for i, target in enumerate(target_names):
