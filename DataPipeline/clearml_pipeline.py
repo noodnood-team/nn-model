@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 PROJECT_NAME = "NutritionAnalyser"
-QUEUE_NAME = "default"
+SERVICE_QUEUE = "hpo_service"
+TRAINING_QUEUE = "default"
+
 
 
 pipe = PipelineController(
@@ -29,13 +31,13 @@ pipe = PipelineController(
     version="2.0",
 )
 
-pipe.set_default_execution_queue(QUEUE_NAME)
+pipe.set_default_execution_queue(TRAINING_QUEUE)
 
 pipe.add_step(
     name="s1_data_preprocessing",
     base_task_project=PROJECT_NAME,
     base_task_name="s1_data_preprocessing",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/test_size": 0.25,
         "General/random_state": 42
@@ -47,7 +49,7 @@ pipe.add_step(
     parents=["s1_data_preprocessing"],
     base_task_project=PROJECT_NAME,
     base_task_name="s2_train_model",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/model_name": "resnet18",
@@ -64,13 +66,13 @@ pipe.add_step(
     parents=["s1_data_preprocessing", "s2_train_model"],
     base_task_project=PROJECT_NAME,
     base_task_name="s3_hpo",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/base_train_task_id": "${s2_train_model.id}",
         "General/max_number_of_experiments": 6,
         "General/max_concurrent_tasks": 1,
-        "General/execution_queue": QUEUE_NAME
+        "General/execution_queue": SERVICE_QUEUE
     }
 )
 
@@ -80,7 +82,7 @@ pipe.add_step(
     parents=["s3_hpo"],
     base_task_project=PROJECT_NAME,
     base_task_name="s4_train_best_model",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/hpo_task_id": "${s3_hpo.id}",
@@ -94,7 +96,7 @@ pipe.add_step(
     parents=["s4_train_best_model"],
     base_task_project=PROJECT_NAME,
     base_task_name="s5_evaluate_model",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/best_model_task_id": "${s4_train_best_model.id}",
@@ -107,7 +109,7 @@ pipe.add_step(
     parents=["s5_evaluate_model"],
     base_task_project=PROJECT_NAME,
     base_task_name="s6_compare_with_champion",
-    execution_queue=QUEUE_NAME,
+    execution_queue=TRAINING_QUEUE,
     parameter_override={
         "General/evaluation_task_id": "${s5_evaluate_model.id}",
         "General/best_model_task_id": "${s4_train_best_model.id}"
