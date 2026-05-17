@@ -74,6 +74,7 @@ def main():
         execution_queue=args["execution_queue"],
         max_number_of_concurrent_tasks=args["max_concurrent_tasks"],
         total_max_jobs=args["max_number_of_experiments"],
+        max_iteration_per_job=1,
     )
 
     optimizer.set_report_period(1)
