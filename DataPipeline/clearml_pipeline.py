@@ -66,13 +66,13 @@ pipe.add_step(
     parents=["s1_data_preprocessing", "s2_train_model"],
     base_task_project=PROJECT_NAME,
     base_task_name="s3_hpo",
-    execution_queue=TRAINING_QUEUE,
+    execution_queue=SERVICE_QUEUE,
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/base_train_task_id": "${s2_train_model.id}",
         "General/max_number_of_experiments": 6,
         "General/max_concurrent_tasks": 1,
-        "General/execution_queue": SERVICE_QUEUE
+        "General/execution_queue": TRAINING_QUEUE
     }
 )
 
