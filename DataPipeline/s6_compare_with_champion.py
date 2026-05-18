@@ -1,5 +1,4 @@
 from clearml import Task
-from clearml.backend_api.session.client import APIClient
 import logging
 
 
@@ -30,8 +29,6 @@ def get_current_champion():
 
 
 def update_task_tags(task_id, add_tags=None, remove_tags=None):
-    client = APIClient()
-
     task = Task.get_task(task_id=task_id)
 
     current_tags = list(task.get_tags() or [])
@@ -45,16 +42,11 @@ def update_task_tags(task_id, add_tags=None, remove_tags=None):
     if add_tags:
         current_tags.extend(add_tags)
 
-    # remove duplicate tags
     current_tags = list(set(current_tags))
 
-    client.tasks.edit(
-        task=task_id,
-        tags=current_tags
-    )
+    task.set_tags(current_tags)
 
     logger.info(f"Updated tags for task {task_id}: {current_tags}")
-
 
 def main():
     task = Task.init(
