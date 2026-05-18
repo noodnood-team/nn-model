@@ -53,7 +53,7 @@ pipe.add_step(
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/model_name": "resnet18",
-        "General/num_epochs": 20,
+        "General/num_epochs": 5,
         "General/batch_size": 32,
         "General/learning_rate": 1e-3,
         "General/weight_decay": 1e-5

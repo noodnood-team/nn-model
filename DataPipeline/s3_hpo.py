@@ -93,8 +93,6 @@ def main():
         execution_queue=execution_queue,
         max_number_of_concurrent_tasks=max_concurrent_tasks,
         total_max_jobs=max_number_of_experiments,
-
-        # สำคัญมาก
         max_iteration_per_job=hpo_num_epochs,
     )
 
@@ -106,35 +104,17 @@ def main():
     optimizer.wait()
     optimizer.stop()
 
-    top_experiments = optimizer.get_top_experiments(
-        top_k=max_number_of_experiments
-    )
+    top_experiments = optimizer.get_top_experiments(top_k=1)
 
     if not top_experiments:
         raise RuntimeError("No HPO experiments were completed.")
 
-    completed_tasks = []
+    best_task = top_experiments[0]
 
-    for exp in top_experiments:
+    logger.info(f"Best HPO task ID: {best_task.id}")
+    logger.info(f"Best HPO task name: {best_task.name}")
+    logger.info(f"Best HPO task status: {best_task.status}")
 
-        logger.info(
-            f"Candidate task: {exp.id}, status: {exp.status}"
-        )
-
-        if exp.status != "completed":
-            logger.warning(
-                f"Skipping failed task: {exp.id}"
-            )
-            continue
-
-        completed_tasks.append(exp)
-
-    if not completed_tasks:
-        raise RuntimeError(
-            "No completed HPO experiments available."
-        )
-
-    best_task = completed_tasks[0]
 
     logger.info(f"Best HPO task ID: {best_task.id}")
     logger.info(f"Best HPO task name: {best_task.name}")
