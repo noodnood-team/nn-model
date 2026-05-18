@@ -1,207 +1,250 @@
 from clearml import Task, Model
-import pandas as pd
 import logging
-import torch
-
-from data_module import create_dataloader
-from model_module import build_model, eval
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def main():
+PROJECT_NAME = "NutritionAnalyser"
 
+
+def get_model_tags(model):
+    tags = model.tags or []
+    return list(tags)
+
+
+def set_model_tags(model, add_tags=None, remove_tags=None):
+    current_tags = get_model_tags(model)
+
+    if remove_tags:
+        current_tags = [
+            tag for tag in current_tags
+            if tag not in remove_tags
+        ]
+
+    if add_tags:
+        current_tags.extend(add_tags)
+
+    current_tags = list(set(current_tags))
+
+    model.tags = current_tags
+
+    logger.info(
+        f"Updated tags for model {model.id}: {current_tags}"
+    )
+
+
+def get_current_champion_model():
+    champion_models = Model.query_models(
+        project_name=PROJECT_NAME,
+        tags=["champion"]
+    )
+
+    if not champion_models:
+        return None
+
+    # Use the latest champion model if more than one exists
+    champion_models = sorted(
+        champion_models,
+        key=lambda model: model.created,
+        reverse=True
+    )
+
+    return champion_models[0]
+
+
+def get_model_mse_from_metadata(model):
+    metadata = model.get_all_metadata() or {}
+
+    if "mse" not in metadata:
+        raise KeyError(
+            f"Model {model.id} does not have 'mse' metadata. "
+            f"Available metadata keys: {list(metadata.keys())}"
+        )
+
+    return float(metadata["mse"])
+
+
+def main():
     task = Task.init(
-        project_name="NutritionAnalyser",
-        task_name="s5_evaluate_model"
+        project_name=PROJECT_NAME,
+        task_name="s6_compare_with_champion"
     )
 
     args = {
-        "preprocess_task_id": "",
-        "best_model_task_id": "",
-        "batch_size": 32
+        "evaluation_task_id": "",
+        "best_model_task_id": ""
     }
 
     task.connect(args)
-    logger.info(f"Connected parameters: {args}")
 
-    preprocess_task_id = task.get_parameter(
-        "General/preprocess_task_id"
+    evaluation_task_id = task.get_parameter(
+        "General/evaluation_task_id"
     )
 
     best_model_task_id = task.get_parameter(
         "General/best_model_task_id"
     )
 
-    batch_size = int(
-        task.get_parameter("General/batch_size")
-    )
-
-    if not preprocess_task_id or not best_model_task_id:
-
-        logger.info(
-            "Missing preprocess_task_id or best_model_task_id. "
-            "This run is only for creating a base task template."
-        )
-
+    if not evaluation_task_id or not best_model_task_id:
+        logger.info("Missing task IDs. Template task only.")
         return
 
-    # =========================
-    # Load dataset
-    # =========================
-
-    s1_task = Task.get_task(
-        task_id=preprocess_task_id
-    )
-
-    train_df_path = (
-        s1_task
-        .artifacts["train_df"]
-        .get_local_copy()
-    )
-
-    test_df_path = (
-        s1_task
-        .artifacts["test_df"]
-        .get_local_copy()
-    )
-
-    train_df = pd.read_csv(train_df_path)
-    test_df = pd.read_csv(test_df_path)
-
     logger.info(
-        "Loaded train_df and test_df from s1 artifacts."
-    )
-
-    _, test_loader = create_dataloader(
-        train_df,
-        test_df,
-        batch_size=batch_size
+        f"evaluation_task_id: {evaluation_task_id}"
     )
 
     logger.info(
-        "Created test dataloader."
+        f"best_model_task_id: {best_model_task_id}"
     )
 
     # =========================
-    # Load s4 metadata
+    # Load challenger evaluation
     # =========================
 
-    best_model_task = Task.get_task(
-        task_id=best_model_task_id
+    evaluation_task = Task.get_task(
+        task_id=evaluation_task_id
     )
 
-    model_metadata = (
-        best_model_task
-        .artifacts["model_metadata"]
+    challenger_result = (
+        evaluation_task
+        .artifacts["evaluation_result"]
         .get()
     )
 
-    model_name = model_metadata["model_name"]
-
-    output_model_id = model_metadata["output_model_id"]
-
-    logger.info(f"Model name: {model_name}")
-    logger.info(f"OutputModel ID: {output_model_id}")
-
-    # =========================
-    # Load model from registry
-    # =========================
-
-    registered_model = Model(
-        model_id=output_model_id
+    challenger_mse = float(
+        challenger_result["mse"]
     )
 
-    model_path = registered_model.get_local_copy()
+    challenger_model_name = (
+        challenger_result["model_name"]
+    )
+
+    challenger_model_id = (
+        challenger_result["output_model_id"]
+    )
+
+    challenger_model = Model(
+        model_id=challenger_model_id
+    )
 
     logger.info(
-        f"Loaded model weights from registry: {model_path}"
+        f"challenger_model_name: {challenger_model_name}"
+    )
+
+    logger.info(
+        f"challenger_model_id: {challenger_model_id}"
+    )
+
+    logger.info(
+        f"challenger_mse: {challenger_mse}"
     )
 
     # =========================
-    # Build model
+    # Find current champion
     # =========================
 
-    model, device = build_model(
-        model_name
-    )
+    champion_model = get_current_champion_model()
 
-    model.load_state_dict(
-        torch.load(
-            model_path,
-            map_location=device
+    if champion_model is None:
+
+        logger.info(
+            "No current champion found. "
+            "Challenger will be promoted."
         )
-    )
 
-    model.to(device)
-    model.eval()
+        promote = True
+        champion_model_id = None
+        champion_mse = None
 
-    criterion = torch.nn.MSELoss()
+    else:
 
-    # =========================
-    # Evaluate model
-    # =========================
+        champion_model_id = champion_model.id
+        champion_mse = get_model_mse_from_metadata(
+            champion_model
+        )
 
-    evaluation_result = eval(
-        test_loader,
-        model,
-        criterion,
-        device
-    )
+        logger.info(
+            f"Current champion model id: {champion_model_id}"
+        )
 
-    logger.info(
-        f"Evaluation result: {evaluation_result}"
-    )
+        logger.info(
+            f"Current champion mse: {champion_mse}"
+        )
 
-    evaluation_artifact = {
-        "model_name": model_name,
-        "best_model_task_id": best_model_task_id,
-        "output_model_id": output_model_id
-    }
-
-    evaluation_artifact.update({
-        metric_name: float(metric_value)
-        for metric_name, metric_value
-        in evaluation_result.items()
-    })
+        promote = challenger_mse < champion_mse
 
     # =========================
-    # Log metrics
+    # Promotion decision
     # =========================
 
-    for metric_name, metric_value in evaluation_artifact.items():
+    if promote:
 
-        if isinstance(metric_value, (int, float)):
+        logger.info(
+            "Challenger promoted to champion."
+        )
 
-            task.get_logger().report_scalar(
-                title="final_evaluation",
-                series=metric_name,
-                value=float(metric_value),
-                iteration=0
+        if champion_model is not None:
+            set_model_tags(
+                champion_model,
+                remove_tags=["champion"],
+                add_tags=["archived_champion"]
             )
 
+        set_model_tags(
+            challenger_model,
+            remove_tags=[
+                "rejected_challenger",
+                "archived_champion"
+            ],
+            add_tags=[
+                "champion",
+                "challenger"
+            ]
+        )
+
+        decision = "promoted"
+
+    else:
+
+        logger.info(
+            "Current champion remains champion."
+        )
+
+        set_model_tags(
+            challenger_model,
+            remove_tags=["champion"],
+            add_tags=["rejected_challenger", "challenger"]
+        )
+
+        decision = "rejected"
+
     # =========================
-    # Upload evaluation result
+    # Upload comparison result
     # =========================
 
+    comparison_result = {
+        "decision": decision,
+        "challenger_model_id": challenger_model_id,
+        "challenger_task_id": best_model_task_id,
+        "challenger_model_name": challenger_model_name,
+        "challenger_mse": challenger_mse,
+        "previous_champion_model_id": champion_model_id,
+        "previous_champion_mse": champion_mse
+    }
+
     task.upload_artifact(
-        name="evaluation_result",
-        artifact_object=evaluation_artifact,
+        name="comparison_result",
+        artifact_object=comparison_result,
         wait_on_upload=True
     )
 
     task.flush(wait_for_uploads=True)
 
-    logger.info("Final evaluation metrics:")
+    logger.info(comparison_result)
 
-    for metric_name, metric_value in evaluation_artifact.items():
-        logger.info(f"{metric_name}: {metric_value}")
-
-    logger.info(
-        "s5_evaluate_model completed."
-    )
+    logger.info("Process completed successfully")
 
 
 if __name__ == "__main__":

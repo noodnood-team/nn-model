@@ -70,7 +70,7 @@ pipe.add_step(
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/base_train_task_id": "${s2_train_model.id}",
-        "General/max_number_of_experiments": 6 ,
+        "General/max_number_of_experiments": 1 ,
         "General/max_concurrent_tasks": 1,
         "General/execution_queue": TRAINING_QUEUE
     }
@@ -86,7 +86,7 @@ pipe.add_step(
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/hpo_task_id": "${s3_hpo.id}",
-        "General/final_num_epochs": 100
+        "General/final_num_epochs": 10
     }
 )
 
