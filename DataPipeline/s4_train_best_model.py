@@ -226,12 +226,10 @@ def main():
         weights_filename=model_path
     )
 
-    output_model.set_all_metadata({
-        "model_name": best_model_name,
-        "mse": str(mse),
-        "source_task_id": task.id,
-        "best_hpo_train_task_id": best_train_task_id
-    })
+    output_model.set_metadata("model_name", best_model_name)
+    output_model.set_metadata("mse", str(mse))
+    output_model.set_metadata("source_task_id", task.id)
+    output_model.set_metadata("best_hpo_train_task_id", best_train_task_id)
 
     output_model.add_tags([
         "challenger"
