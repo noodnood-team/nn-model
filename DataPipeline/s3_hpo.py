@@ -20,7 +20,8 @@ def main():
         "base_train_task_id": "",
         "max_number_of_experiments": 6,
         "max_concurrent_tasks": 1,
-        "execution_queue": "default"
+        "execution_queue": "default",
+        "hpo_num_epochs": 10
     }
 
     task.connect(args)
@@ -28,6 +29,20 @@ def main():
 
     preprocess_task_id = task.get_parameter("General/preprocess_task_id")
     base_train_task_id = task.get_parameter("General/base_train_task_id")
+
+    max_number_of_experiments = int(
+        task.get_parameter("General/max_number_of_experiments")
+    )
+
+    max_concurrent_tasks = int(
+        task.get_parameter("General/max_concurrent_tasks")
+    )
+
+    execution_queue = task.get_parameter("General/execution_queue")
+
+    hpo_num_epochs = int(
+        task.get_parameter("General/hpo_num_epochs")
+    )
 
     if not preprocess_task_id or not base_train_task_id:
         logger.info(
@@ -48,11 +63,15 @@ def main():
             ),
             DiscreteParameterRange(
                 "General/model_name",
-                values=["resnet18", "resnet34", "mobilenet_v3_small"]
+                values=[
+                    "resnet18",
+                    "resnet34",
+                    "mobilenet_v3_small"
+                ]
             ),
             DiscreteParameterRange(
                 "General/num_epochs",
-                values=[10]
+                values=[hpo_num_epochs]
             ),
             DiscreteParameterRange(
                 "General/batch_size",
@@ -71,30 +90,59 @@ def main():
         objective_metric_series="mse",
         objective_metric_sign="min",
         optimizer_class=OptimizerOptuna,
-        execution_queue=args["execution_queue"],
-        max_number_of_concurrent_tasks=args["max_concurrent_tasks"],
-        total_max_jobs=args["max_number_of_experiments"],
-        max_iteration_per_job=1,
+        execution_queue=execution_queue,
+        max_number_of_concurrent_tasks=max_concurrent_tasks,
+        total_max_jobs=max_number_of_experiments,
+
+        # สำคัญมาก
+        max_iteration_per_job=hpo_num_epochs,
     )
 
     optimizer.set_report_period(1)
 
     logger.info("Starting HPO...")
+
     optimizer.start()
     optimizer.wait()
     optimizer.stop()
 
-    top_experiments = optimizer.get_top_experiments(top_k=1)
+    top_experiments = optimizer.get_top_experiments(
+        top_k=max_number_of_experiments
+    )
 
     if not top_experiments:
         raise RuntimeError("No HPO experiments were completed.")
 
-    best_task = top_experiments[0]
+    completed_tasks = []
+
+    for exp in top_experiments:
+
+        logger.info(
+            f"Candidate task: {exp.id}, status: {exp.status}"
+        )
+
+        if exp.status != "completed":
+            logger.warning(
+                f"Skipping failed task: {exp.id}"
+            )
+            continue
+
+        completed_tasks.append(exp)
+
+    if not completed_tasks:
+        raise RuntimeError(
+            "No completed HPO experiments available."
+        )
+
+    best_task = completed_tasks[0]
 
     logger.info(f"Best HPO task ID: {best_task.id}")
     logger.info(f"Best HPO task name: {best_task.name}")
 
-    task.set_parameter("General/best_train_task_id", best_task.id)
+    task.set_parameter(
+        "General/best_train_task_id",
+        best_task.id
+    )
 
     task.upload_artifact(
         name="best_hpo_result",
@@ -107,6 +155,8 @@ def main():
         },
         wait_on_upload=True
     )
+
+    task.flush(wait_for_uploads=True)
 
     logger.info("s3_hpo completed.")
 

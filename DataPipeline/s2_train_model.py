@@ -20,7 +20,7 @@ def main():
     args = {
         "preprocess_task_id": "",
         "model_name": "resnet18", # will be replaced by parameter in pipeline
-        'num_epochs': 20, # will be replaced by parameter in pipeline
+        'num_epochs': 5, # will be replaced by parameter in pipeline
         'batch_size': 32, # will be replaced by parameter in pipeline
         'learning_rate': 1e-3, # will be replaced by parameter in pipeline
         'weight_decay': 1e-5 # will be replaced by parameter in pipeline
