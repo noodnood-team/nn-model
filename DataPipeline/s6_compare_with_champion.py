@@ -6,7 +6,7 @@ import sys
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PROJECT_NAME = "NutritionAnalyser" # Consider making this dynamic
+PROJECT_NAME = "NutritionAnalyser" # Fallback project name
 
 
 def get_model_metadata(model, key, default=None):
@@ -92,16 +92,27 @@ def get_current_champion(project_name):
 
 
 def main():
+    task = None # Initialize task to None
     try:
         task = Task.init(
             project_name=PROJECT_NAME,
             task_name="s6_compare_with_champion"
         )
-        project_name = task.project_name # Dynamically get project name
     except Exception as e:
         logger.error(f"Failed to initialize ClearML task: {e}")
         sys.exit(1)
 
+    if task is None:
+        logger.error("ClearML Task initialization failed and returned None.")
+        sys.exit(1)
+
+    # Safely determine the project name to use
+    # Use the project name from the task object if available, otherwise fallback to the constant
+    project_name = getattr(task, 'project_name', PROJECT_NAME)
+
+    if not project_name:
+        logger.error("Project name could not be determined (neither from task object nor constant). Exiting.")
+        sys.exit(1)
 
     args = {
         "evaluation_task_id": "",
