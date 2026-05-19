@@ -18,10 +18,10 @@ def main():
     args = {
         "preprocess_task_id": "",
         "base_train_task_id": "",
-        "max_number_of_experiments": 6,
+        "max_number_of_experiments": 10,
         "max_concurrent_tasks": 1,
         "execution_queue": "default",
-        "hpo_num_epochs": 10
+        "hpo_num_epochs": 15
     }
 
     task.connect(args)

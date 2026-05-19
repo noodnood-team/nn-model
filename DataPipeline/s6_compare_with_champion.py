@@ -116,6 +116,7 @@ def main():
                 "mse": challenger_mse
             }
         else:
+            logger.info("Champion outperforms challenger. Keeping existing champion details.")
             champion_result = {
                 "pipeline_id": champion_pipeline_id,
                 "model_name": champion_model_name,
