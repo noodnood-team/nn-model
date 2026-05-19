@@ -143,6 +143,7 @@ def main():
     output_model.set_metadata("batch_size", str(best_batch_size))
     output_model.set_metadata("learning_rate", str(best_learning_rate))
     output_model.set_metadata("weight_decay", str(best_weight_decay))
+    output_model.set_metadata("role", "challenger")
 
     uploaded_uri = output_model.update_weights(
         weights_filename=model_path,

@@ -5,38 +5,23 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 PROJECT_NAME = "NutritionAnalyser"
 
 
-def get_current_champion():
-
-    champion_models = Model.query_models(
-        project_name=PROJECT_NAME,
-        tags=["champion"]
-    )
-
-    if not champion_models:
-        return None
-
-    champion_models = sorted(
-        champion_models,
-        key=lambda model: model.created,
-        reverse=True
-    )
-
-    return champion_models[0]
+def get_model_metadata(model, key, default=None):
+    value = model.get_metadata(key)
+    if value is None:
+        return default
+    return value
 
 
-def update_model_tags(
-    model_id,
-    add_tags=None,
-    remove_tags=None
-):
+def set_model_metadata(model, key, value):
+    ok = model.set_metadata(key, str(value))
+    logger.info(f"Set metadata for model {model.id}: {key}={value}, success={ok}")
 
-    model = Model(model_id=model_id)
 
-    current_tags = model.tags or []
+def update_model_tags(model, add_tags=None, remove_tags=None):
+    current_tags = list(model.tags or [])
 
     if remove_tags:
         current_tags = [
@@ -48,16 +33,42 @@ def update_model_tags(
         current_tags.extend(add_tags)
 
     current_tags = list(set(current_tags))
-
     model.tags = current_tags
 
-    logger.info(
-        f"Updated tags for model {model_id}: {current_tags}"
+    logger.info(f"Updated tags for model {model.id}: {current_tags}")
+
+
+def get_current_champion():
+    models = Model.query_models(
+        project_name=None,
+        tags=None,
+        only_published=False,
+        include_archived=True,
+        max_results=100
     )
+
+    champion_candidates = []
+
+    for model in models:
+        role = get_model_metadata(model, "role", "")
+        tags = list(model.tags or [])
+
+        if role == "champion" or "champion" in tags:
+            champion_candidates.append(model)
+
+    if not champion_candidates:
+        return None
+
+    champion_candidates = sorted(
+        champion_candidates,
+        key=lambda m: m.created,
+        reverse=True
+    )
+
+    return champion_candidates[0]
 
 
 def main():
-
     task = Task.init(
         project_name=PROJECT_NAME,
         task_name="s6_compare_with_champion"
@@ -70,167 +81,79 @@ def main():
 
     task.connect(args)
 
-    evaluation_task_id = task.get_parameter(
-        "General/evaluation_task_id"
-    )
-
-    best_model_task_id = task.get_parameter(
-        "General/best_model_task_id"
-    )
+    evaluation_task_id = task.get_parameter("General/evaluation_task_id")
+    best_model_task_id = task.get_parameter("General/best_model_task_id")
 
     if not evaluation_task_id or not best_model_task_id:
-
-        logger.info(
-            "Missing task IDs. Template task only."
-        )
-
+        logger.info("Missing task IDs. Template task only.")
         return
 
-    logger.info(
-        f"evaluation_task_id: {evaluation_task_id}"
-    )
+    evaluation_task = Task.get_task(task_id=evaluation_task_id)
+    challenger_result = evaluation_task.artifacts["evaluation_result"].get()
 
-    logger.info(
-        f"best_model_task_id: {best_model_task_id}"
-    )
+    challenger_mse = float(challenger_result["mse"])
+    challenger_model_name = challenger_result["model_name"]
+    challenger_model_id = challenger_result["output_model_id"]
 
-    # =========================
-    # Load challenger evaluation
-    # =========================
+    challenger_model = Model(model_id=challenger_model_id)
 
-    evaluation_task = Task.get_task(
-        task_id=evaluation_task_id
-    )
-
-    challenger_result = (
-        evaluation_task
-        .artifacts["evaluation_result"]
-        .get()
-    )
-
-    challenger_mse = float(
-        challenger_result["mse"]
-    )
-
-    challenger_model_name = (
-        challenger_result["model_name"]
-    )
-
-    challenger_model_id = (
-        challenger_result["output_model_id"]
-    )
-
-    logger.info(
-        f"challenger_model_name: {challenger_model_name}"
-    )
-
-    logger.info(
-        f"challenger_model_id: {challenger_model_id}"
-    )
-
-    logger.info(
-        f"challenger_mse: {challenger_mse}"
-    )
-
-    # =========================
-    # Find current champion
-    # =========================
+    logger.info(f"challenger_model_name: {challenger_model_name}")
+    logger.info(f"challenger_model_id: {challenger_model_id}")
+    logger.info(f"challenger_mse: {challenger_mse}")
 
     champion_model = get_current_champion()
 
     if champion_model is None:
-
-        logger.info(
-            "No current champion found. "
-            "Challenger will be promoted."
-        )
-
+        logger.info("No current champion found. Challenger will be promoted.")
         promote = True
         champion_model_id = None
         champion_mse = None
-
     else:
-
         champion_model_id = champion_model.id
+        champion_mse = float(get_model_metadata(champion_model, "mse"))
 
-        champion_metadata = (
-            champion_model.get_all_metadata()
-        )
-
-        champion_mse = float(
-            champion_metadata["mse"]
-        )
-
-        logger.info(
-            f"Current champion model id: "
-            f"{champion_model_id}"
-        )
-
-        logger.info(
-            f"Current champion mse: "
-            f"{champion_mse}"
-        )
+        logger.info(f"Current champion model id: {champion_model_id}")
+        logger.info(f"Current champion mse: {champion_mse}")
 
         promote = challenger_mse < champion_mse
 
-    # =========================
-    # Promote challenger
-    # =========================
-
     if promote:
+        logger.info("Challenger promoted to champion.")
 
-        logger.info(
-            "Challenger promoted to champion."
-        )
-
-        # Archive old champion
-        if champion_model_id is not None:
-
+        if champion_model is not None:
+            set_model_metadata(champion_model, "role", "archived_champion")
             update_model_tags(
-                model_id=champion_model_id,
+                champion_model,
                 remove_tags=["champion"],
                 add_tags=["archived_champion"]
             )
 
-        # Promote challenger
+        set_model_metadata(challenger_model, "role", "champion")
+        set_model_metadata(challenger_model, "mse", challenger_mse)
+        set_model_metadata(challenger_model, "model_name", challenger_model_name)
+
         update_model_tags(
-            model_id=challenger_model_id,
-            remove_tags=[
-                "rejected_challenger",
-                "archived_champion"
-            ],
-            add_tags=[
-                "champion",
-                "challenger"
-            ]
+            challenger_model,
+            remove_tags=["rejected_challenger", "archived_champion"],
+            add_tags=["champion", "challenger"]
         )
 
         decision = "promoted"
 
-    # =========================
-    # Keep current champion
-    # =========================
-
     else:
+        logger.info("Current champion remains champion.")
 
-        logger.info(
-            "Current champion remains champion."
-        )
+        set_model_metadata(challenger_model, "role", "rejected_challenger")
+        set_model_metadata(challenger_model, "mse", challenger_mse)
+        set_model_metadata(challenger_model, "model_name", challenger_model_name)
 
         update_model_tags(
-            model_id=challenger_model_id,
+            challenger_model,
             remove_tags=["champion"],
-            add_tags=[
-                "rejected_challenger",
-                "challenger"
-            ]
+            add_tags=["rejected_challenger", "challenger"]
         )
 
         decision = "rejected"
-
-    # =========================
-    # Save comparison result
-    # =========================
 
     comparison_result = {
         "decision": decision,
@@ -251,10 +174,7 @@ def main():
     task.flush(wait_for_uploads=True)
 
     logger.info(comparison_result)
-
-    logger.info(
-        "Process completed successfully"
-    )
+    logger.info("Process completed successfully")
 
 
 if __name__ == "__main__":
