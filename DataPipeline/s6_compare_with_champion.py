@@ -26,6 +26,11 @@ def get_champion_pipeline_details():
             key=lambda x: x.data.created
         )
         pipeline_state = latest_pipeline.get_configuration_object_as_dict("Pipeline")
+
+        if "s6_compare_with_champion" not in pipeline_state:
+            logger.info("No s6_compare_with_champion step found in the latest pipeline.")
+            return None, None, None
+        
         step_data = pipeline_state["s6_compare_with_champion"]
         executed_task_id = step_data.get("executed") or step_data.get("job_id")
         step_task = Task.get_task(task_id=executed_task_id)
