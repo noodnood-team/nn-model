@@ -1,0 +1,58 @@
+name: Run ClearML Data Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "DataPipeline/**"
+      - ".github/workflows/run_data_pipeline.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "DataPipeline/**"
+      - ".github/workflows/run_data_pipeline.yml"
+
+jobs:
+  run_pipeline:
+    runs-on: ubuntu-latest
+
+    env:
+      CLEARML_API_ACCESS_KEY: ${{ secrets.CLEARML_API_ACCESS_KEY }}
+      CLEARML_API_SECRET_KEY: ${{ secrets.CLEARML_API_SECRET_KEY }}
+      CLEARML_API_HOST: ${{ secrets.CLEARML_API_HOST }}
+      CLEARML_WEB_HOST: ${{ secrets.CLEARML_WEB_HOST }}
+      CLEARML_FILES_HOST: ${{ secrets.CLEARML_FILES_HOST }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r DataPipeline/requirements.txt
+
+      - name: Debug ClearML ENV
+        run: |
+          echo "CLEARML_API_HOST=$CLEARML_API_HOST"
+          if [ -z "$CLEARML_API_HOST" ]; then echo "CLEARML_API_HOST is empty"; exit 1; fi
+          curl -I $CLEARML_API_HOST
+
+      - name: Run ClearML pipeline
+        run: |
+          cd DataPipeline
+          python s1_data_preprocessing.py
+          python s2_train_model.py
+          python s3_hpo.py
+          python s4_train_best_model.py
+          python s5_evaluate_model.py
+          python s6_compare_with_champion.py
+          python clearml_pipeline.py

@@ -1,0 +1,30 @@
+name: Deploy Model Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "model_service/**"
+
+jobs:
+  deploy-model-service:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy model service to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/nn-model
+            git pull origin main
+
+            cd model_service
+            source ~/myenv/bin/activate
+            pip install -r requirement.txt
+
+            pkill -f gunicorn || true
+            nohup gunicorn -w 1 -b 0.0.0.0:8080 app:app > gunicorn.log 2>&1 &
