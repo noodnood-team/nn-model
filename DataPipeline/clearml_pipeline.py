@@ -86,7 +86,7 @@ pipe.add_step(
     parameter_override={
         "General/preprocess_task_id": "${s1_data_preprocessing.id}",
         "General/hpo_task_id": "${s3_hpo.id}",
-        "General/final_num_epochs": 10
+        "General/num_epochs": 10
     }
 )
 

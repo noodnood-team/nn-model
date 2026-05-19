@@ -171,6 +171,12 @@ def main():
         wait_on_upload=True
     )
 
+    task.upload_artifact(
+        name="model",
+        artifact_object=model_path,
+        wait_on_upload=True
+    )
+
     task.flush(wait_for_uploads=True)
 
     logger.info(

@@ -110,11 +110,11 @@ def main():
     # Load model from registry
     # =========================
 
-    registered_model = Model(
-        model_id=output_model_id
+    model_path = (
+        best_model_task
+        .artifacts["model"]
+        .get_local_copy()
     )
-
-    model_path = registered_model.get_local_copy()
 
     logger.info(
         f"Loaded model weights from registry: {model_path}"
