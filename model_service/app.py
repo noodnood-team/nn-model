@@ -89,4 +89,4 @@ def get_prediction():
         return jsonify({'error': str(e)}), 400
 # Run the Flask server
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=False, host="0.0.0.0", port=8080, use_reloader=False)

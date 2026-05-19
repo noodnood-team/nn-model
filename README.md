@@ -109,7 +109,7 @@ python clearml_pipeline.py
 
 This will execute all steps in the correct order, with ClearML handling task dependencies and tracking.
 
-### 2. How to Run Model Service
+### 2. How to Run Model Service in local machine
 To run the Flask API for model inference:
 1. Navigate to the `model_service` directory:
    ```bash
@@ -126,7 +126,7 @@ To run the Flask API for model inference:
     python app.py
     ```
 
-The API will be available at `http://localhost:5000`.
+The API will be available at `http://localhost:8080`.
 API Endpoint:
 - `POST /predict`: Accepts an image file and returns predicted nutrition values.
 - `GET /health`: Returns a simple health check response.
