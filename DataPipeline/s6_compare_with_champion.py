@@ -9,13 +9,34 @@ logger = logging.getLogger(__name__)
 PROJECT_NAME = "NutritionAnalyser"
 
 
-def get_model_tags(model):
-    tags = model.tags or []
-    return list(tags)
+def get_current_champion():
+
+    champion_models = Model.query_models(
+        project_name=PROJECT_NAME,
+        tags=["champion"]
+    )
+
+    if not champion_models:
+        return None
+
+    champion_models = sorted(
+        champion_models,
+        key=lambda model: model.created,
+        reverse=True
+    )
+
+    return champion_models[0]
 
 
-def set_model_tags(model, add_tags=None, remove_tags=None):
-    current_tags = get_model_tags(model)
+def update_model_tags(
+    model_id,
+    add_tags=None,
+    remove_tags=None
+):
+
+    model = Model(model_id=model_id)
+
+    current_tags = model.tags or []
 
     if remove_tags:
         current_tags = [
@@ -31,42 +52,12 @@ def set_model_tags(model, add_tags=None, remove_tags=None):
     model.tags = current_tags
 
     logger.info(
-        f"Updated tags for model {model.id}: {current_tags}"
+        f"Updated tags for model {model_id}: {current_tags}"
     )
-
-
-def get_current_champion_model():
-    champion_models = Model.query_models(
-        project_name=PROJECT_NAME,
-        tags=["champion"]
-    )
-
-    if not champion_models:
-        return None
-
-    # Use the latest champion model if more than one exists
-    champion_models = sorted(
-        champion_models,
-        key=lambda model: model.created,
-        reverse=True
-    )
-
-    return champion_models[0]
-
-
-def get_model_mse_from_metadata(model):
-    metadata = model.get_all_metadata() or {}
-
-    if "mse" not in metadata:
-        raise KeyError(
-            f"Model {model.id} does not have 'mse' metadata. "
-            f"Available metadata keys: {list(metadata.keys())}"
-        )
-
-    return float(metadata["mse"])
 
 
 def main():
+
     task = Task.init(
         project_name=PROJECT_NAME,
         task_name="s6_compare_with_champion"
@@ -88,7 +79,11 @@ def main():
     )
 
     if not evaluation_task_id or not best_model_task_id:
-        logger.info("Missing task IDs. Template task only.")
+
+        logger.info(
+            "Missing task IDs. Template task only."
+        )
+
         return
 
     logger.info(
@@ -125,10 +120,6 @@ def main():
         challenger_result["output_model_id"]
     )
 
-    challenger_model = Model(
-        model_id=challenger_model_id
-    )
-
     logger.info(
         f"challenger_model_name: {challenger_model_name}"
     )
@@ -145,7 +136,7 @@ def main():
     # Find current champion
     # =========================
 
-    champion_model = get_current_champion_model()
+    champion_model = get_current_champion()
 
     if champion_model is None:
 
@@ -161,22 +152,29 @@ def main():
     else:
 
         champion_model_id = champion_model.id
-        champion_mse = get_model_mse_from_metadata(
-            champion_model
+
+        champion_metadata = (
+            champion_model.get_all_metadata()
+        )
+
+        champion_mse = float(
+            champion_metadata["mse"]
         )
 
         logger.info(
-            f"Current champion model id: {champion_model_id}"
+            f"Current champion model id: "
+            f"{champion_model_id}"
         )
 
         logger.info(
-            f"Current champion mse: {champion_mse}"
+            f"Current champion mse: "
+            f"{champion_mse}"
         )
 
         promote = challenger_mse < champion_mse
 
     # =========================
-    # Promotion decision
+    # Promote challenger
     # =========================
 
     if promote:
@@ -185,15 +183,18 @@ def main():
             "Challenger promoted to champion."
         )
 
-        if champion_model is not None:
-            set_model_tags(
-                champion_model,
+        # Archive old champion
+        if champion_model_id is not None:
+
+            update_model_tags(
+                model_id=champion_model_id,
                 remove_tags=["champion"],
                 add_tags=["archived_champion"]
             )
 
-        set_model_tags(
-            challenger_model,
+        # Promote challenger
+        update_model_tags(
+            model_id=challenger_model_id,
             remove_tags=[
                 "rejected_challenger",
                 "archived_champion"
@@ -206,22 +207,29 @@ def main():
 
         decision = "promoted"
 
+    # =========================
+    # Keep current champion
+    # =========================
+
     else:
 
         logger.info(
             "Current champion remains champion."
         )
 
-        set_model_tags(
-            challenger_model,
+        update_model_tags(
+            model_id=challenger_model_id,
             remove_tags=["champion"],
-            add_tags=["rejected_challenger", "challenger"]
+            add_tags=[
+                "rejected_challenger",
+                "challenger"
+            ]
         )
 
         decision = "rejected"
 
     # =========================
-    # Upload comparison result
+    # Save comparison result
     # =========================
 
     comparison_result = {
@@ -244,7 +252,9 @@ def main():
 
     logger.info(comparison_result)
 
-    logger.info("Process completed successfully")
+    logger.info(
+        "Process completed successfully"
+    )
 
 
 if __name__ == "__main__":
